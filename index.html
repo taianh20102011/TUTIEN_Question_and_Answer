@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ Thống Hỗ Trợ Plugin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f4f6f9; font-family: system-ui, -apple-system, sans-serif; }
+    .card { border: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    .nav-pills .nav-link.active { background-color: #0d6efd; }
+  </style>
+</head>
+<body class="py-5">
+
+  <div class="container" style="max-width: 850px;">
+    
+    <!-- THANH CHUYỂN ĐỔI USER / ADMIN -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h3 class="fw-bold text-primary m-0">Support Center</h3>
+      <ul class="nav nav-pills" id="pills-tab">
+        <li class="nav-item">
+          <button class="nav-link active" onclick="switchTab('user')">Khách hàng</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link text-danger" onclick="switchTab('admin')">Quản trị viên (Admin)</button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- ================= GIAO DIỆN USER ================= -->
+    <div id="userSection">
+      <div class="row g-4">
+        <!-- FORM GỬI CÂU HỎI -->
+        <div class="col-md-6">
+          <div class="card p-4">
+            <h5 class="fw-bold mb-3">Gửi yêu cầu hỗ trợ</h5>
+            <form onsubmit="submitQuestion(event)">
+              <div class="mb-3">
+                <label class="form-label">Họ tên</label>
+                <input type="text" id="uName" class="form-control" required placeholder="Nguyễn Văn A">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" id="uEmail" class="form-control" required placeholder="email@gmail.com">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Mô tả vấn đề</label>
+                <textarea id="uQuestion" class="form-control" rows="4" required placeholder="Gặp lỗi gì khi cài đặt plugin..."></textarea>
+              </div>
+              <button type="submit" id="btnUserSubmit" class="btn btn-primary w-100">Gửi câu hỏi</button>
+            </form>
+            <div id="userAlert" class="mt-3"></div>
+          </div>
+        </div>
+
+        <!-- TRA CỨU GIẢI ĐÁP -->
+        <div class="col-md-6">
+          <div class="card p-4">
+            <h5 class="fw-bold mb-3">Tra cứu giải đáp</h5>
+            <div class="input-group mb-3">
+              <input type="email" id="searchEmail" class="form-control" placeholder="Nhập Email để tìm...">
+              <button class="btn btn-outline-primary" onclick="searchByEmail()">Tìm</button>
+            </div>
+            <div id="searchResults" style="max-height: 380px; overflow-y: auto;">
+              <p class="text-muted text-center mt-3">Nhập Gmail để xem phản hồi từ Admin.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= GIAO DIỆN ADMIN (CÓ MẬT KHẨU) ================= -->
+    <div id="adminSection" style="display: none;">
+      
+      <!-- KHUNG ĐĂNG NHẬP MẬT KHẨU ADMIN -->
+      <div id="adminAuthCard" class="card p-4 text-center mx-auto" style="max-width: 400px;">
+        <h5 class="fw-bold text-danger mb-3">Xác thực Quyền Admin</h5>
+        <div class="mb-3">
+          <input type="password" id="adminPass" class="form-control" placeholder="Nhập mật khẩu Admin...">
+        </div>
+        <button class="btn btn-danger w-100" onclick="loginAdmin()">Đăng nhập</button>
+        <div id="authAlert" class="mt-2"></div>
+      </div>
+
+      <!-- DANH SÁCH TICKET KHI ĐÃ NHẬP ĐÚNG PASS -->
+      <div id="adminDashboard" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold text-danger m-0">Danh sách câu hỏi chưa trả lời</h5>
+          <button class="btn btn-sm btn-outline-secondary" onclick="fetchAdminTickets()">Tải lại danh sách</button>
+        </div>
+        <div id="adminTicketsList"></div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // URL API Google Apps Script của bạn
+    const API_URL = "https://script.google.com/macros/s/AKfycbxazCKWRvqXlbVKmQY1-4E7JE6MX0VbyRNwEGh82o1ih-KVuWAoAubnnSipWlbVOqoqqg/exec";
+    let currentAdminPass = "";
+
+    function switchTab(tab) {
+      if (tab === 'user') {
+        document.getElementById('userSection').style.display = 'block';
+        document.getElementById('adminSection').style.display = 'none';
+      } else {
+        document.getElementById('userSection').style.display = 'none';
+        document.getElementById('adminSection').style.display = 'block';
+      }
+    }
+
+    // 1. USER: Gửi câu hỏi mới
+    async function submitQuestion(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnUserSubmit');
+      btn.disabled = true;
+      btn.innerText = 'Đang gửi...';
+
+      const payload = {
+        action: 'submitTicket',
+        name: document.getElementById('uName').value,
+        email: document.getElementById('uEmail').value,
+        question: document.getElementById('uQuestion').value
+      };
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          document.getElementById('userAlert').innerHTML = `<div class="alert alert-success">Đã gửi thành công! Mã ID: ${data.id}</div>`;
+          document.getElementById('uQuestion').value = '';
+        }
+      } catch (err) {
+        alert('Có lỗi xảy ra, vui lòng thử lại!');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Gửi câu hỏi';
+      }
+    }
+
+    // 2. USER: Tra cứu câu hỏi qua Email
+    async function searchByEmail() {
+      const email = document.getElementById('searchEmail').value.trim();
+      const resultsDiv = document.getElementById('searchResults');
+      if (!email) return;
+
+      resultsDiv.innerHTML = '<p class="text-center">Đang tra cứu...</p>';
+
+      try {
+        const res = await fetch(`${API_URL}?action=searchEmail&email=${encodeURIComponent(email)}`);
+        const result = await res.json();
+
+        if (result.success && result.data.length > 0) {
+          let html = '';
+          result.data.forEach(item => {
+            const isPending = item.status === 'Pending';
+            html += `
+              <div class="card mb-3 p-3 bg-light border">
+                <div class="d-flex justify-content-between mb-1">
+                  <span class="badge ${isPending ? 'bg-warning text-dark' : 'bg-success'}">${isPending ? 'Chờ giải đáp' : 'Đã trả lời'}</span>
+                  <small class="text-muted">${item.id}</small>
+                </div>
+                <div class="fw-bold text-dark mb-2">Q: ${escapeHtml(item.question)}</div>
+                <div class="p-2 rounded bg-white border">
+                  <small class="text-secondary fw-bold d-block">Trả lời từ Admin:</small>
+                  <span>${item.answer ? escapeHtml(item.answer) : '<i>Đang chờ phản hồi...</i>'}</span>
+                </div>
+              </div>
+            `;
+          });
+          resultsDiv.innerHTML = html;
+        } else {
+          resultsDiv.innerHTML = '<p class="text-warning text-center">Không tìm thấy yêu cầu nào!</p>';
+        }
+      } catch (err) {
+        resultsDiv.innerHTML = '<p class="text-danger text-center">Lỗi tải dữ liệu!</p>';
+      }
+    }
+
+    // 3. ADMIN: Đăng nhập mật khẩu
+    function loginAdmin() {
+      currentAdminPass = document.getElementById('adminPass').value;
+      if (!currentAdminPass) return;
+      fetchAdminTickets();
+    }
+
+    // 4. ADMIN: Lấy danh sách ticket từ API
+    async function fetchAdminTickets() {
+      const container = document.getElementById('adminTicketsList');
+      const authAlert = document.getElementById('authAlert');
+      
+      try {
+        const res = await fetch(`${API_URL}?action=getAdminTickets&password=${encodeURIComponent(currentAdminPass)}`);
+        const result = await res.json();
+
+        if (!result.success) {
+          authAlert.innerHTML = `<span class="text-danger">${result.message}</span>`;
+          return;
+        }
+
+        // Đăng nhập thành công -> Hiện Dashboard
+        document.getElementById('adminAuthCard').style.display = 'none';
+        document.getElementById('adminDashboard').style.display = 'block';
+
+        if (result.data.length === 0) {
+          container.innerHTML = '<div class="alert alert-info text-center">Không có câu hỏi nào chưa xử lý!</div>';
+          return;
+        }
+
+        let html = '';
+        result.data.forEach(item => {
+          html += `
+            <div class="card mb-3 p-3 border-start border-4 border-danger" id="ticket-row-${item.rowIndex}">
+              <div class="mb-2">
+                <strong>Người hỏi:</strong> ${escapeHtml(item.name)} (<code>${escapeHtml(item.email)}</code>)
+              </div>
+              <div class="mb-2">
+                <label class="form-label fw-bold">Câu hỏi (Có thể chỉnh sửa lại):</label>
+                <textarea id="q-${item.rowIndex}" class="form-control" rows="2">${escapeHtml(item.question)}</textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-bold text-success">Câu trả lời:</label>
+                <textarea id="a-${item.rowIndex}" class="form-control" rows="3" placeholder="Nhập câu trả lời vào đây..."></textarea>
+              </div>
+              <button class="btn btn-success" onclick="replyTicket(${item.rowIndex})">Xác nhận Trả lời & Ẩn</button>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+
+      } catch (err) {
+        alert('Lỗi kết nối API Admin!');
+      }
+    }
+
+    // 5. ADMIN: Gửi câu trả lời và ẩn ticket
+    async function replyTicket(rowIndex) {
+      const qVal = document.getElementById(`q-${rowIndex}`).value;
+      const aVal = document.getElementById(`a-${rowIndex}`).value;
+
+      if (!aVal.trim()) {
+        alert('Bạn chưa nhập câu trả lời!');
+        return;
+      }
+
+      const payload = {
+        action: 'replyTicket',
+        password: currentAdminPass,
+        rowIndex: rowIndex,
+        question: qVal,
+        answer: aVal
+      };
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          // Xóa ngay phần tử HTML vừa trả lời thành công
+          const card = document.getElementById(`ticket-row-${rowIndex}`);
+          if (card) card.remove();
+
+          const container = document.getElementById('adminTicketsList');
+          if (container.children.length === 0) {
+            container.innerHTML = '<div class="alert alert-info text-center">Đã xử lý hết các câu hỏi!</div>';
+          }
+        } else {
+          alert(result.message);
+        }
+      } catch (err) {
+        alert('Lỗi khi gửi phản hồi!');
+      }
+    }
+
+    function escapeHtml(str) {
+      if(!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+  </script>
+
+</body>
+</html>
